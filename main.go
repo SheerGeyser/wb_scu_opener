@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/d-tsuji/clipboard"
+	"github.com/go-vgo/robotgo"
 	hook "github.com/robotn/gohook"
 	"log"
 	"os/exec"
@@ -10,11 +11,28 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var regExp = regexp.MustCompile(`\s+`)
 
-const wbURL = `https://www.wildberries.ru/catalog/%d/detail.aspx`
+const (
+	wbURL = `https://www.wildberries.ru/catalog/%d/detail.aspx`
+	logo  = `
+██╗    ██╗██████╗     ███████╗ ██████╗██╗   ██╗    
+██║    ██║██╔══██╗    ██╔════╝██╔════╝██║   ██║    
+██║ █╗ ██║██████╔╝    ███████╗██║     ██║   ██║    
+██║███╗██║██╔══██╗    ╚════██║██║     ██║   ██║    
+╚███╔███╔╝██████╔╝    ███████║╚██████╗╚██████╔╝    
+ ╚══╝╚══╝ ╚═════╝     ╚══════╝ ╚═════╝ ╚═════╝     
+ ██████╗ ██████╗ ███████╗███╗   ██╗███████╗██████╗ 
+██╔═══██╗██╔══██╗██╔════╝████╗  ██║██╔════╝██╔══██╗
+██║   ██║██████╔╝█████╗  ██╔██╗ ██║█████╗  ██████╔╝
+██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║██╔══╝  ██╔══██╗
+╚██████╔╝██║     ███████╗██║ ╚████║███████╗██║  ██║
+ ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝
+`
+)
 
 type Data struct {
 	SCU map[uint64]struct{}
@@ -30,7 +48,7 @@ func ParseText(text string) (Data, error) {
 	for _, numStr := range nums {
 		num, err := strconv.ParseUint(numStr, 10, 64)
 		if err != nil {
-			return Data{}, fmt.Errorf("invalid number: %s", numStr)
+			continue
 		}
 		scu[num] = struct{}{}
 	}
@@ -39,33 +57,46 @@ func ParseText(text string) (Data, error) {
 }
 
 func main() {
-	eventChan := hook.Start()
-	defer hook.End()
+	fmt.Println(logo)
+	fmt.Println(`
+HOW USE:
+1. SELECT TEXT
+2. PRESS CTRL+SHIFT+F
+`)
 
-	keyPressedChan := make(chan bool)
-	go checkHotKeyPress(eventChan, keyPressedChan)
+	fmt.Println("HISTORY:")
 
-	for pressed := range keyPressedChan {
-		if pressed {
-			text := takeTextFromBuffer()
+	for {
+		if pressed := hook.AddEvents(robotgo.KeyF, robotgo.Ctrl, robotgo.Shift); pressed {
+			text := takeSelectedText()
 			data, err := ParseText(text)
 			if err != nil {
 				log.Println(err)
 			}
 
-			for scu, _ := range data.SCU {
-				go openSCUInNewTab(scu)
+			if len(data.SCU) > 0 {
+				fmt.Print("OPEN:\t")
 			}
+
+			var wg sync.WaitGroup
+			wg.Add(len(data.SCU))
+			for scu, _ := range data.SCU {
+				go openSCUInNewTab(&wg, scu)
+			}
+
+			wg.Wait()
+
+			fmt.Print("\n")
 		}
 	}
-
 }
 
-func openSCUInNewTab(scu uint64) {
-	// Открытие URL в браузере
+func openSCUInNewTab(wg *sync.WaitGroup, scu uint64) {
+	defer wg.Done()
+	fmt.Printf("%d\t", scu)
 	err := openBrowser(fmt.Sprintf(wbURL, scu))
 	if err != nil {
-		fmt.Println("Ошибка при открытии браузера:", err)
+		fmt.Println("can't open browser")
 	}
 }
 
@@ -79,24 +110,24 @@ func openBrowser(url string) error {
 	case "darwin": // для macOS
 		cmd = exec.Command("open", url)
 	default:
-		return fmt.Errorf("неизвестная операционная система")
+		return fmt.Errorf("unknow platform")
 	}
 
 	return cmd.Start()
 }
 
-func checkHotKeyPress(evenetChan <-chan hook.Event, result chan<- bool) {
-	for event := range evenetChan {
-		if event.Keycode == 58 && event.Kind == hook.KeyUp {
-			result <- true
-		}
+func takeSelectedText() string {
+	err := robotgo.KeyTap(robotgo.KeyC, robotgo.Ctrl)
+	if err != nil {
+		log.Println("can't copy selected text")
+		return ""
 	}
-}
 
-func takeTextFromBuffer() string {
+	robotgo.MilliSleep(50)
+
 	text, err := clipboard.Get()
 	if err != nil {
-		log.Println("can't take data from buffer", err)
+		log.Println("can't take data from buffer")
 		return ""
 	}
 
