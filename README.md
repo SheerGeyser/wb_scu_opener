@@ -23,7 +23,7 @@
 
 ## Установка
 
-1. Скачайте последний релиз с [GitHub Releases](https://github.com/SheerGeyser/wb_scu_opener/releases).
+1. Скачайте последний релиз с [GitHub Releases](https://github.com/SheerGeyser/wb_scu_opener/releases/tag/v1.0.2).
 
 ## Использование
 
