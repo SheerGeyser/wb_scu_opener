@@ -1,6 +1,6 @@
 #Requires AutoHotkey v2.0
 
-^+f:: {
+^+w:: {
     initialBuffer := A_Clipboard
     Send("^c")
     Sleep(100)
